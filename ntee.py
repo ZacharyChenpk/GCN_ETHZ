@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from DCA.abstract_word_entity import AbstractWordEntity
+from GCN_ETHZ.abstract_word_entity import AbstractWordEntity
 
 
 class NTEE(AbstractWordEntity):
