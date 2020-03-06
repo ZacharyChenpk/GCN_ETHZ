@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import Local_ETHZ.utils as utils
-from Local_ETHZ.abstract_word_entity import AbstractWordEntity
+import GCN_ETHZ.utils as utils
+from GCN_ETHZ.abstract_word_entity import AbstractWordEntity
 import copy
 import math
 
