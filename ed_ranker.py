@@ -535,7 +535,8 @@ class EDRanker:
                     
                     if first_global_flag:
                         dc_end_time = time.time()
-                        print("dc", dc,"preparing use time:", dc_end_time-dc_start_time, flush=True)
+                        dc_n_node = new_node_mask.size(2)
+                        print("dc", dc, "n_node:", dc_n_node, ",preparing use time:", dc_end_time-dc_start_time, flush=True)
 
                     scores, dual_scores = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, train_mlist[cur_doc_name], train_dataset_adj[dc], nega_e, sample_idx, gold=true_pos.view(-1, 1), isTrain=True, isLocal=False)
                     if first_global_flag:
