@@ -316,12 +316,14 @@ class EDRanker:
             gold_e_adjs.append(e_adj)
         return cand_to_idxs, idx_to_cands, gold_e_adjs
 
-    def e_graph_build(self, cand_ids, hops=2):
+    def e_graph_build(self, cand_ids, hops=2, max_nm=25000):
         cand_to_idx = {}
         idx_to_cand = copy.deepcopy(cand_ids)
         node_counter = Counter()
         max_cand = max(self.ent_inlinks.keys())
         cnt = 0
+        n_ments = len(cand_ids)
+        max_n_node = int(max_nm / n_ments)
         if hops == 2:
             for c in cand_ids:
                 if c not in cand_to_idx:
@@ -338,6 +340,8 @@ class EDRanker:
                     cand_to_idx[n].append(cnt)
                     idx_to_cand.append(n)
                     cnt+=1
+                    if cnt >= max_n_node:
+                        break
             n = len(idx_to_cand)
             e_adj = np.zeros((n, n))
             for cand, idx in cand_to_idx.items():
@@ -535,13 +539,14 @@ class EDRanker:
                     
                     if first_global_flag:
                         dc_end_time = time.time()
+                        dc_n_ment = new_node_mask.size(0)
                         dc_n_node = new_node_mask.size(2)
-                        print("dc", dc, "n_node:", dc_n_node, ",preparing use time:", dc_end_time-dc_start_time, flush=True)
+                        print("dc", dc, "n_node:", dc_n_node, ",n_ment:", dc_n_ment, ",n1m:", dc_n_node*dc_n_ment, ",n2m:", dc_n_node*dc_n_node*dc_n_ment, ",preparing use time:", dc_end_time-dc_start_time, flush=True)
 
                     scores, dual_scores = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, train_mlist[cur_doc_name], train_dataset_adj[dc], nega_e, sample_idx, gold=true_pos.view(-1, 1), isTrain=True, isLocal=False)
                     if first_global_flag:
                         dc_end_time = time.time()
-                        print("dc", dc,"total use time:", dc_end_time-dc_start_time, flush=True)
+                        print("dc", dc,"total use time:", dc_end_time-dc_start_time, ",avg time:", (dc_end_time-start_time)/(dc+1), flush=True)
                     if dc == 0:
                         # print("global+local:",scores)
                         end_time = time.time()

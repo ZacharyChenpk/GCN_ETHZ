@@ -268,7 +268,14 @@ class MulRelRanker(LocalCtxAttRanker):
             
             scores_local = self.local_score_combine(inputs_local)
             scores_global = self.global_score_combine(inputs_global)
+            
+            msk = 1 - 2*(scores_local>1e8)
+            scores_local = msk * scores_local
+            msk = 1 - 2*(scores_global>1e8)
+            scores_global = msk * scores_global
+            
             scores = (scores_local*(1-self.global_beta) + self.global_beta*scores_global).view(n_ments, n_sample+1)
+            
             return scores, (scores_local.view(n_ments, n_sample+1), scores_global.view(n_ments, n_sample+1))
 
         else:
