@@ -7,7 +7,7 @@ from torch.distributions import Categorical
 from GCN_ETHZ.gcn.model import GCN
 import GCN_ETHZ.gcn.utils as gcnutil
 import copy
-import ipdb
+# import ipdb
 import math
 
 np.set_printoptions(threshold=20)
@@ -269,10 +269,10 @@ class MulRelRanker(LocalCtxAttRanker):
             scores_local = self.local_score_combine(inputs_local)
             scores_global = self.global_score_combine(inputs_global)
             
-            msk = 1 - 2*(scores_local>1e8)
-            scores_local = msk * scores_local
-            msk = 1 - 2*(scores_global>1e8)
-            scores_global = msk * scores_global
+            msk = 1 - (scores_local>1e8)
+            scores_local = msk.float() * scores_local
+            msk = 1 - (scores_global>1e8)
+            scores_global = msk.float() * scores_global
             
             scores = (scores_local*(1-self.global_beta) + self.global_beta*scores_global).view(n_ments, n_sample+1)
             

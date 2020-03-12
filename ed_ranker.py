@@ -17,7 +17,7 @@ import csv
 import json
 import time
 from collections import Counter
-import ipdb
+# import ipdb
 import random
 import math
 
@@ -316,7 +316,9 @@ class EDRanker:
             gold_e_adjs.append(e_adj)
         return cand_to_idxs, idx_to_cands, gold_e_adjs
 
-    def e_graph_build(self, cand_ids, hops=2, max_nm=25000):
+    def e_graph_build(self, cand_ids, hops=2, max_nm=False):
+        if max_nm == False:
+            max_nm = self.args.max_nm
         cand_to_idx = {}
         idx_to_cand = copy.deepcopy(cand_ids)
         node_counter = Counter()
@@ -448,7 +450,7 @@ class EDRanker:
                         self.rt_flag = True
                     else:
                         self.rt_flag = False
-                    predictions = self.predict(data, mlist, madj)
+                    predictions = self.predict(data, mlist, madj, isLocal=False)
                     #self.records[e][dname] = self.record
                     f1, precisioin = D.eval(org_dev_datasets[di][1], predictions)
 
@@ -766,7 +768,9 @@ class EDRanker:
                     cur_scores, _ = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, None, madj[dc], nega_e, cur_cand_idxs, gold=None, isTrain=False, chosen_ment=False, isLocal=False)
                     assert cur_scores.size(0) == n_ments
 
-                    small_scores, small_idxs = torch.topk(cur_scores.squeeze(1), min(search_ment_size, n_ments), largest=False, sorted=True)
+                    # small_scores, small_idxs = torch.topk(cur_scores.squeeze(1), min(search_ment_size, n_ments), largest=False, sorted=True)
+                    small_idxs = torch.multinomial(torch.ones(n_ments).cuda(), min(search_ment_size, n_ments))
+                    small_scores = cur_scores.squeeze(1)[small_idxs]
 
                     random_new_cand_idx = torch.cat([cur_cand_idxs[small_idxs].unsqueeze(1), torch.multinomial(entity_mask[small_idxs], min(n_cands, search_entity_size)-1, replacement=True)], dim=1)
                     # small_scores: search_ment_size
@@ -812,7 +816,7 @@ class EDRanker:
             if isLocal == False and final_pde > death_epoches:
                 print("dc:", dc, "pred_time:", end_time-start_time, ",pde:", final_pde, ",n_ments:", n_ments)
             if isLocal == False and dc == 0:
-                print(cur_scores.squeeze(1))
+                print("global_beta", self.model.global_beta, cur_scores.squeeze(1))
             
             if self.rt_flag:
                 self.run_time.append([total_candidates, end_time-start_time])
