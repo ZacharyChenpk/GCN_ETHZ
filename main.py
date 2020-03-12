@@ -94,7 +94,7 @@ parser.add_argument("--max_nm", type=int,
 # args for training
 parser.add_argument("--n_epochs", type=int,
                     help="max number of training epochs",
-                    default=1500)
+                    default=300)
 parser.add_argument("--dev_f1_change_lr", type=float,
                     help="dev f1 to change learning rate",
                     default=0.928)
@@ -175,6 +175,7 @@ if __name__ == "__main__":
     config = {'hid_dims': args.hid_dims,
               'emb_dims': entity_embeddings.shape[1],
               'freeze_embs': True,
+#               'freeze_embs': False,
               'tok_top_n': args.tok_top_n,
               'margin': args.margin,
               'margin_global': args.margin_global,

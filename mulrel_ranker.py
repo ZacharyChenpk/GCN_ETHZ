@@ -9,6 +9,7 @@ import GCN_ETHZ.gcn.utils as gcnutil
 import copy
 # import ipdb
 import math
+import random
 
 np.set_printoptions(threshold=20)
 
@@ -76,12 +77,14 @@ class MulRelRanker(LocalCtxAttRanker):
                 torch.nn.Linear(3, 10),
                 torch.nn.ReLU(),
                 torch.nn.Dropout(p=self.dr),
-                torch.nn.Linear(10, 1))
+                torch.nn.Linear(10, 1),
+                torch.nn.ReLU())
         self.global_score_combine = torch.nn.Sequential(
                 torch.nn.Linear(2, 10),
                 torch.nn.ReLU(),
                 torch.nn.Dropout(p=self.dr),
-                torch.nn.Linear(10, 1))
+                torch.nn.Linear(10, 1),
+                torch.nn.ReLU())
 #         torch.nn.init.xavier_uniform_(self.local_score_combine[0].weight)
 #         torch.nn.init.xavier_uniform_(self.local_score_combine[3].weight)
 #         torch.nn.init.xavier_uniform_(self.global_score_combine[0].weight)
@@ -199,6 +202,7 @@ class MulRelRanker(LocalCtxAttRanker):
             # nega_node_cands: n_ment * (n_sample+1) * n_node
             # nega_node_mask: n_ment * (n_sample+1) * n_node
             # nega_entity_emb: n_ment * (n_sample+1) * n_node * emb_dim
+            
             nega_entity_emb = self.entity_embeddings(nega_node_cands)
 
             aaa, bbb, n_node, emb_dim = nega_entity_emb.size()
@@ -206,6 +210,11 @@ class MulRelRanker(LocalCtxAttRanker):
             nega_entity_emb = gcnutil.batch_feature_norm(nega_entity_emb.view(-1, n_node, emb_dim)).view(aaa, bbb, n_node, emb_dim)
             ment_emb = self.gcn_ment(ment_emb, m_graph_adj.long())
             nega_entity_emb = self.gcn_entity.batch_forward(nega_entity_emb.view(-1, n_node, emb_dim), nega_adjs.view(-1, n_node, n_node)).view(aaa, bbb, n_node, emb_dim)
+            
+            if isTrain and random.random()<0.01:
+                print("randomly printing embeddings")
+                print("ment_emb:",ment_emb)
+                print("entity_emb:",nega_entity_emb[0][bbb-1][:aaa])
 
             n_sample = nega_adjs.size(1) - 1
 

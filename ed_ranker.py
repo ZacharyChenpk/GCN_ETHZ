@@ -330,11 +330,14 @@ class EDRanker:
             for c in cand_ids:
                 if c not in cand_to_idx:
                     cand_to_idx[c] = []
+                    if c in self.ent_inlinks:
+                        neighbor = self.ent_inlinks[c]
+                        node_counter.update(neighbor)
                 cand_to_idx[c].append(cnt)
                 cnt+=1
-                if c in self.ent_inlinks:
-                    neighbor = self.ent_inlinks[c]
-                    node_counter.update(neighbor)
+#                 if c in self.ent_inlinks:
+#                     neighbor = self.ent_inlinks[c]
+#                     node_counter.update(neighbor)
             for n in list(node_counter.elements()):
                 if node_counter[n] > 1 and (n not in cand_to_idx) and n < self.model.entity_voca.size():
                     if n not in cand_to_idx:
@@ -414,7 +417,7 @@ class EDRanker:
 
         print('creating optimizer')
         optimizer_local = optim.Adam(self.model.local_parameter(), lr=config['lr'])
-        optimizer_global = optim.Adam(self.model.global_parameter(), lr=config['lr'])
+        optimizer_global = optim.Adam(self.model.global_parameter(), lr=config['lr'], weight_decay=0.02)
 
         for param_name, param in self.model.named_parameters():
             if param.requires_grad:
@@ -757,6 +760,7 @@ class EDRanker:
                 local_cur_cands = torch.gather(entity_ids, 1, cur_cand_idxs.unsqueeze(1))
 
                 death_cnt = 0
+                print_flag = False # for debug
                 for pde in range(predict_epoches):
                     cur_cands = torch.gather(entity_ids, 1, cur_cand_idxs.unsqueeze(1))
                     list_cands = cur_cands.squeeze(1).cpu().numpy().tolist()
@@ -767,6 +771,10 @@ class EDRanker:
                     nega_e = (torch.LongTensor(e_adj).cuda(), idx_to_cand, the_mask)
                     cur_scores, _ = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, None, madj[dc], nega_e, cur_cand_idxs, gold=None, isTrain=False, chosen_ment=False, isLocal=False)
                     assert cur_scores.size(0) == n_ments
+                    
+                    if print_flag:
+                        print_flag = False
+                        print("new_scores:", cur_scores)
 
                     # small_scores, small_idxs = torch.topk(cur_scores.squeeze(1), min(search_ment_size, n_ments), largest=False, sorted=True)
                     small_idxs = torch.multinomial(torch.ones(n_ments).cuda(), min(search_ment_size, n_ments))
@@ -803,6 +811,10 @@ class EDRanker:
                         if death_cnt > death_epoches:
                             break
                     else:
+                        print("pde:", pde, "small_idxs:", small_idxs, "cur_cand_idxs[small_idxs]", cur_cand_idxs[small_idxs])
+                        print_flag = True
+                        print("old_scores:", cur_scores)
+                        print("big_idxs:", big_idxs)
                         cur_cand_idxs[small_idxs] = big_idxs
                         death_cnt = 0
 
