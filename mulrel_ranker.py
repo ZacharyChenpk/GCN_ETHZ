@@ -77,14 +77,12 @@ class MulRelRanker(LocalCtxAttRanker):
                 torch.nn.Linear(3, 10),
                 torch.nn.ReLU(),
                 torch.nn.Dropout(p=self.dr),
-                torch.nn.Linear(10, 1),
-                torch.nn.ReLU())
+                torch.nn.Linear(10, 1))
         self.global_score_combine = torch.nn.Sequential(
                 torch.nn.Linear(2, 10),
                 torch.nn.ReLU(),
                 torch.nn.Dropout(p=self.dr),
-                torch.nn.Linear(10, 1),
-                torch.nn.ReLU())
+                torch.nn.Linear(10, 1))
 #         torch.nn.init.xavier_uniform_(self.local_score_combine[0].weight)
 #         torch.nn.init.xavier_uniform_(self.local_score_combine[3].weight)
 #         torch.nn.init.xavier_uniform_(self.global_score_combine[0].weight)
@@ -278,9 +276,9 @@ class MulRelRanker(LocalCtxAttRanker):
             scores_local = self.local_score_combine(inputs_local)
             scores_global = self.global_score_combine(inputs_global)
             
-            msk = 1 - (scores_local>1e8)
+            msk = 1 - (scores_local>1e8).int()
             scores_local = msk.float() * scores_local
-            msk = 1 - (scores_global>1e8)
+            msk = 1 - (scores_global>1e8).int()
             scores_global = msk.float() * scores_global
             
             scores = (scores_local*(1-self.global_beta) + self.global_beta*scores_global).view(n_ments, n_sample+1)

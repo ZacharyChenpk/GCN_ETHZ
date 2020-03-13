@@ -62,7 +62,7 @@ class GCN(nn.Module):
     def __init__(self, embsize, hidsize, nclass, dropout):
         super(GCN, self).__init__()
         self.layer1 = singleGCNLayer(embsize, hidsize, "ReLU")
-        self.layer2 = singleGCNLayer(hidsize, nclass)
+        self.layer2 = singleGCNLayer(hidsize, nclass, "ReLU")
         self.dropout = dropout
 
     def forward(self, embeddings, adj):

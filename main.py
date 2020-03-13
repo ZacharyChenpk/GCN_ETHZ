@@ -89,7 +89,7 @@ parser.add_argument("--batch_maxsize", type=int,
                     default=80)
 parser.add_argument("--max_nm", type=int,
                     help="max number of n_node*n_ment",
-                    default=16000)
+                    default=20000)
 
 # args for training
 parser.add_argument("--n_epochs", type=int,
