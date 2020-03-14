@@ -49,6 +49,7 @@ class EDRanker:
         self.predict_epoches = config['predict_epoches']
         self.death_epoches = config['death_epoches']
         self.local_stop_epoches = config['local_stop_epoches']
+        self.change_rate = config['change_rate']
         self.local_cur_stop_epoches = 0
 
         self.word_vocab = config['word_voca']
@@ -378,21 +379,47 @@ class EDRanker:
                 e_adj[neighbor, idx] = 1
             return cand_to_idx, idx_to_cand, e_adj
 
-    def ment_neg_sample(self, n_sample, entity_ids, true_pos, entity_mask):
+#     def ment_neg_sample(self, n_sample, entity_ids, true_pos, entity_mask):
+#         # entity_ids is n_ment * n_cand(k) indexes
+#         n_ment, n_cand = entity_ids.size()
+        
+#         copy_entity_mask = entity_mask.index_put((torch.LongTensor(np.arange(n_ment)).cuda(), true_pos.long()), torch.zeros(n_ment).cuda())
+#         only_one_cand = (copy_entity_mask.sum(dim=1)==0).float().cuda()
+#         copy_entity_mask = entity_mask.index_put((torch.LongTensor(np.arange(n_ment)).cuda(), true_pos.long()), only_one_cand)
+#         sample_idx = torch.multinomial(copy_entity_mask, n_sample, replacement=True)
+        
+#         i_matrix = torch.LongTensor(list(range(n_ment))).cuda().unsqueeze(1).repeat(1, n_sample)
+#         only_one_cand = only_one_cand.unsqueeze(1).repeat(1, n_sample)
+#         copy_entity_mask.index_put_((torch.flatten(i_matrix), torch.flatten(sample_idx)), torch.flatten(only_one_cand))
+#         # sample_idx is n_ment * n_sample
+#         # copy_entity_mask: n_ment * n_cand
+#         return sample_idx, copy_entity_mask
+
+    def ment_neg_sample(self, n_sample, entity_ids, true_pos, entity_mask, change_rate):
         # entity_ids is n_ment * n_cand(k) indexes
         n_ment, n_cand = entity_ids.size()
-        
+        ment_res_num = torch.FloatTensor([n_sample] * n_ment).cuda()
+        assert change_rate <= 1.0
+        change_one_time = max(int(change_rate * n_ment), 1)
         copy_entity_mask = entity_mask.index_put((torch.LongTensor(np.arange(n_ment)).cuda(), true_pos.long()), torch.zeros(n_ment).cuda())
         only_one_cand = (copy_entity_mask.sum(dim=1)==0).float().cuda()
         copy_entity_mask = entity_mask.index_put((torch.LongTensor(np.arange(n_ment)).cuda(), true_pos.long()), only_one_cand)
-        sample_idx = torch.multinomial(copy_entity_mask, n_sample, replacement=True)
-        
-        i_matrix = torch.LongTensor(list(range(n_ment))).cuda().unsqueeze(1).repeat(1, n_sample)
-        only_one_cand = only_one_cand.unsqueeze(1).repeat(1, n_sample)
-        copy_entity_mask.index_put_((torch.flatten(i_matrix), torch.flatten(sample_idx)), torch.flatten(only_one_cand))
-        # sample_idx is n_ment * n_sample
-        # copy_entity_mask: n_ment * n_cand
-        return sample_idx, copy_entity_mask
+
+        neg_sample_idx = true_pos.unsqueeze(0).unsqueeze(0).repeat(n_ment, n_sample, 1)
+        copy_entity_ids = entity_ids.t().squeeze(0).repeat(n_ment, 1, 1)
+        # neg_sample_idx: n_ment * n_sample * n_ment
+        # copy_entity_ids: n_ment * n_cand * n_ment
+
+        while ment_res_num.sum() > 0:
+            sample_ment_idx = torch.multinomial(ment_res_num, min(change_one_time, (ment_res_num>0).sum()), replacement=False)
+            sample_mask = copy_entity_mask[sample_ment_idx]
+            sample_ent_idx = torch.multinomial(sample_mask, 1, replacement=False).squeeze(1)
+#             print(sample_ment_idx, sample_ent_idx)
+            neg_sample_idx[:,:,sample_ment_idx] = neg_sample_idx[:,:,sample_ment_idx].index_put((sample_ment_idx, n_sample-ment_res_num[sample_ment_idx].long()), sample_ent_idx)
+            #print(neg_sample_idx[:,:,sample_ment_idx])
+            ment_res_num[sample_ment_idx] -= 1
+
+        return neg_sample_idx, torch.gather(copy_entity_ids, 1, neg_sample_idx)
 
     # Heuristic Order Learning Method - Based on Mention-Local Similarity or Mention-Topical Similarity
     def train(self, org_train_dataset, org_dev_datasets, config):
@@ -506,10 +533,6 @@ class EDRanker:
                 optimizer_global.zero_grad()
                 # optimizer.zero_grad()
 
-                # sample_idx: n_ment * n_sample
-                # copy_entity_mask: n_ment * n_cand
-                sample_idx, copy_entity_mask = self.ment_neg_sample(self.n_sample, entity_ids, true_pos, entity_mask)
-
                 n_ment, n_cand = entity_ids.size()
                 cur_max_n_ment = max(cur_max_n_ment, n_ment)
                 # print("cur_max_n_ment:", cur_max_n_ment)
@@ -517,14 +540,25 @@ class EDRanker:
                 e_idx_to_cands = [[] for _ in range(n_ment) ]
                 e_adjs = [[] for _ in range(n_ment) ]
                 sele_cand = [m['selected_cands']['cands'] for m in batch]
+                
+#                 # sample_idx: n_ment * n_sample
+#                 # copy_entity_mask: n_ment * n_cand
+#                 sample_idx, copy_entity_mask = self.ment_neg_sample(self.n_sample, entity_ids, true_pos, entity_mask)
+
+                # neg_sample_idx: n_ment * n_sample * n_ment
+                # neg_sample_cands: n_ment * n_sample * n_ment
+                # sample_idx: n_ment * n_sample
+                neg_sample_idx, neg_sample_cands = self.ment_neg_sample(self.n_sample, entity_ids, true_pos, entity_mask, self.change_rate)
+                sample_idx = torch.gather(neg_sample_idx, 2, torch.LongTensor(range(n_ment)).cuda().unsqueeze(1).unsqueeze(2).repeat(1, self.n_sample, 1)).squeeze(2)
 
                 if isLocal == False:
                     ###  USE LOCAL AND GLOBAL
                     for i in range(n_ment):
                         for j in range(self.n_sample):
-                            true_cands = copy.deepcopy(self.true_cands[dc])
-                            true_cands[i] = sele_cand[i][sample_idx[i][j]]
-                            cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(true_cands)
+#                             true_cands = copy.deepcopy(self.true_cands[dc])
+#                             true_cands[i] = sele_cand[i][sample_idx[i][j]]
+#                             cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(true_cands)
+                            cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(list(neg_sample_cands[i][j]))
                             e_cand_to_idxs[i].append(cand_to_idx)
                             e_idx_to_cands[i].append(idx_to_cand)
                             e_adjs[i].append(e_adj)
@@ -587,7 +621,7 @@ class EDRanker:
 #                                 print("sum 0 detected")
 #                                 ipdb.set_trace()
                 
-                self.model.regularize(max_norm=20)
+                self.model.regularize(max_norm=1)
 
                 loss = loss.cpu().data.numpy()
                 total_loss += loss
@@ -809,6 +843,10 @@ class EDRanker:
                     if big_score_in_new.sum() - new_scores[:,0].sum() < 1e-3:
                         death_cnt = death_cnt + 1
                         if death_cnt > death_epoches:
+                            if random.random()<0.01:
+                                print("DEATH")
+                                print("pde:", pde, "old_scores:", cur_scores)
+                                print("new_scores:", new_scores)
                             break
                     else:
                         print("pde:", pde, "small_idxs:", small_idxs, "cur_cand_idxs[small_idxs]", cur_cand_idxs[small_idxs])

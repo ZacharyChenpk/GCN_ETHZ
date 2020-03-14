@@ -89,7 +89,10 @@ parser.add_argument("--batch_maxsize", type=int,
                     default=80)
 parser.add_argument("--max_nm", type=int,
                     help="max number of n_node*n_ment",
-                    default=20000)
+                    default=12000)
+parser.add_argument("--change_rate", type=float,
+                    help="change how much of ments one time when predicting",
+                    default=0.5)
 
 # args for training
 parser.add_argument("--n_epochs", type=int,
@@ -200,6 +203,7 @@ if __name__ == "__main__":
               'use_local_epoches': args.use_local_epoches,
               'local_stop_epoches': args.local_stop_epoches,
               'global_beta': args.global_beta,
+              'change_rate': args.change_rate,
               'model_path': args.model_path,
               'args': args}
 
