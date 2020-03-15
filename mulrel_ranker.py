@@ -136,7 +136,7 @@ class MulRelRanker(LocalCtxAttRanker):
             assert ment_embs.size(1) == self.emb_dims
             e_embs = entity_embs[:,:,:n_ment,:].reshape(-1, n_ment, self.emb_dims)
             # e_embs: (search_ment_size * search_entity_size) * n_ment * emb_dim
-            sim_scores = (e_embs * self.gcned_mat_diag).mul(ment_embs).sum(dim=2)
+            sim_scores = (e_embs * self.gcned_mat_diag).mul(ment_embs.unsqueeze(0)).sum(dim=2)
             return sim_scores.view(search_ment_size, search_entity_size, n_ment)
 
     def forward(self, token_ids, tok_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, m_graph_list, m_graph_adj, nega_e, sample_idx, gold=None, isTrain=True, isLocal=False, chosen_ment=False):
@@ -210,7 +210,7 @@ class MulRelRanker(LocalCtxAttRanker):
             nega_entity_emb = self.gcn_entity.batch_forward(nega_entity_emb.view(-1, n_node, emb_dim), nega_adjs.view(-1, n_node, n_node)).view(aaa, bbb, n_node, emb_dim)
             
             if isTrain and random.random()<0.01:
-                print("randomly printing embeddings")
+                print("randomly printing Training embeddings")
                 print("ment_emb:",ment_emb)
                 print("entity_emb:",nega_entity_emb[0][bbb-1][:aaa])
 
@@ -363,6 +363,9 @@ class MulRelRanker(LocalCtxAttRanker):
         l1_b_norm2 = self.global_score_combine[0].bias.norm()
         l2_w_norm2 = self.global_score_combine[3].weight.norm()
         l2_b_norm2 = self.global_score_combine[3].bias.norm()
+        
+        me_norm = self.m_e_diag.norm()
+        gm_norm = self.gcned_mat_diag.norm()
 
         if (l1_w_norm > max_norm).data.all():
             self.local_score_combine[0].weight.data = self.local_score_combine[0].weight.data * max_norm / l1_w_norm.data
@@ -380,6 +383,10 @@ class MulRelRanker(LocalCtxAttRanker):
             self.global_score_combine[3].weight.data = self.global_score_combine[3].weight.data * max_norm / l2_w_norm2.data
         if (l2_b_norm2 > max_norm).data.all():
             self.global_score_combine[3].bias.data = self.global_score_combine[3].bias.data * max_norm / l2_b_norm2.data
+        if (me_norm > max_norm).data.all():
+            self.m_e_diag.data = self.m_e_diag.data * max_norm / me_norm
+        if (gm_norm > max_norm).data.all():
+            self.gcned_mat_diag.data = self.gcned_mat_diag.data * max_norm / gm_norm
 
     def finish_episode(self, rewards_arr, log_prob_arr):
         if len(rewards_arr) != len(log_prob_arr):

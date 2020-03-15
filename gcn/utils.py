@@ -133,9 +133,9 @@ def batch_normalize(adj):
 #     return f
 
 def feature_norm(f):
-    rowsum = torch.sum(f, dim=1)
+    rowsum = torch.sum(f**2, dim=1)
     rowsum = rowsum + 1e-8
-    r_inv = torch.reciprocal(rowsum)
+    r_inv = torch.rsqrt(rowsum)
     infmsk = torch.ones_like(r_inv, requires_grad=False).cuda()
     infmsk[torch.isinf(r_inv)] = 0.
     infmsk[torch.isnan(r_inv)] = 0.
@@ -146,9 +146,9 @@ def feature_norm(f):
 def batch_feature_norm(f):
     bsz = f.size(0)
     n = f.size(1)
-    rowsum = torch.sum(f, dim=2)
+    rowsum = torch.sum(f**2, dim=2)
     rowsum = rowsum + 1e-8
-    r_inv = torch.reciprocal(rowsum)
+    r_inv = torch.rsqrt(rowsum)
     infmsk = torch.ones_like(r_inv, requires_grad=False).cuda()
     infmsk[torch.isinf(r_inv)] = 0.
     infmsk[torch.isnan(r_inv)] = 0.

@@ -18,6 +18,7 @@ import json
 import time
 from collections import Counter
 # import ipdb
+# import pdb
 import random
 import math
 
@@ -480,6 +481,7 @@ class EDRanker:
                         self.rt_flag = True
                     else:
                         self.rt_flag = False
+                    # pdb.set_trace()
                     predictions = self.predict(data, mlist, madj, isLocal=False)
                     #self.records[e][dname] = self.record
                     f1, precisioin = D.eval(org_dev_datasets[di][1], predictions)
@@ -558,7 +560,7 @@ class EDRanker:
 #                             true_cands = copy.deepcopy(self.true_cands[dc])
 #                             true_cands[i] = sele_cand[i][sample_idx[i][j]]
 #                             cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(true_cands)
-                            cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(list(neg_sample_cands[i][j]))
+                            cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(neg_sample_cands[i][j].tolist())
                             e_cand_to_idxs[i].append(cand_to_idx)
                             e_idx_to_cands[i].append(idx_to_cand)
                             e_adjs[i].append(e_adj)
@@ -583,16 +585,17 @@ class EDRanker:
                         print("dc", dc, "n_node:", dc_n_node, ",n_ment:", dc_n_ment, ",n1m:", dc_n_node*dc_n_ment, ",n2m:", dc_n_node*dc_n_node*dc_n_ment, ",preparing use time:", dc_end_time-dc_start_time, flush=True)
 
                     scores, dual_scores = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, train_mlist[cur_doc_name], train_dataset_adj[dc], nega_e, sample_idx, gold=true_pos.view(-1, 1), isTrain=True, isLocal=False)
-                    if first_global_flag:
-                        dc_end_time = time.time()
-                        print("dc", dc,"total use time:", dc_end_time-dc_start_time, ",avg time:", (dc_end_time-start_time)/(dc+1), flush=True)
+#                     if first_global_flag:
+#                         dc_end_time = time.time()
+#                         print("dc", dc,"total use time:", dc_end_time-dc_start_time, ",avg time:", (dc_end_time-start_time)/(dc+1), flush=True)
                     if dc == 0:
                         # print("global+local:",scores)
                         end_time = time.time()
-                        print("local:",dual_scores[0])
+                        print("dc0 local:",dual_scores[0])
                         print("global:",dual_scores[1])
 
-                    loss = self.model.loss(dual_scores[1], torch.LongTensor([self.n_sample]*n_ment).cuda(), isLocal=isLocal)
+                    # loss = self.model.loss(dual_scores[1], torch.LongTensor([self.n_sample]*n_ment).cuda(), isLocal=isLocal)
+                    loss = self.model.loss(scores, torch.LongTensor([self.n_sample]*n_ment).cuda(), isLocal=isLocal)
                     loss.backward()
 #                     if config['model_path'] != 'model_param9':
 #                         optimizer_local.step()
@@ -603,7 +606,7 @@ class EDRanker:
                     scores, _ = self.model.forward(token_ids, token_mask, entity_ids, entity_mask, p_e_m, mtype, etype, ment_ids, ment_mask, desc_ids, desc_mask, False, False, False, sample_idx, gold=true_pos.view(-1, 1), isTrain=True, isLocal=True)
 
                     if self.local_cur_stop_epoches == self.local_stop_epoches - 1 and dc == 0 and (e + 1) % eval_after_n_epochs == 0:
-                        print(scores)
+                        print("final local scores:", scores)
                     
                     loss = self.model.loss(scores, true_pos, isLocal=isLocal)
                     loss.backward()
@@ -621,7 +624,7 @@ class EDRanker:
 #                                 print("sum 0 detected")
 #                                 ipdb.set_trace()
                 
-                self.model.regularize(max_norm=1)
+                self.model.regularize(max_norm=2)
 
                 loss = loss.cpu().data.numpy()
                 total_loss += loss
@@ -808,7 +811,7 @@ class EDRanker:
                     
                     if print_flag:
                         print_flag = False
-                        print("new_scores:", cur_scores)
+                        print("changed new_scores:", cur_scores)
 
                     # small_scores, small_idxs = torch.topk(cur_scores.squeeze(1), min(search_ment_size, n_ments), largest=False, sorted=True)
                     small_idxs = torch.multinomial(torch.ones(n_ments).cuda(), min(search_ment_size, n_ments))
@@ -825,7 +828,7 @@ class EDRanker:
                         for j in range(min(n_cands, search_entity_size)):
                             true_cands = copy.deepcopy(list_cands)
                             which_ment = small_idxs[i]
-                            true_cands[which_ment] = entity_ids[i][random_new_cand_idx[i][j]]
+                            true_cands[which_ment] = int(entity_ids[which_ment][random_new_cand_idx[i][j]])
                             cand_to_idx, idx_to_cand, e_adj = self.e_graph_build(true_cands)
                             e_cand_to_idxs[i].append(cand_to_idx)
                             e_idx_to_cands[i].append(idx_to_cand)
@@ -840,19 +843,20 @@ class EDRanker:
                     # big_idxs = random_new_cand_idx[big_idxs_in_new]
                     big_idxs = torch.gather(random_new_cand_idx, 1, big_idxs_in_new.unsqueeze(1)).squeeze(1)
                     final_pde = pde
-                    if big_score_in_new.sum() - new_scores[:,0].sum() < 1e-3:
+                    if big_score_in_new.sum() - new_scores[:,0].sum() < 1e-7:
                         death_cnt = death_cnt + 1
                         if death_cnt > death_epoches:
                             if random.random()<0.01:
                                 print("DEATH")
                                 print("pde:", pde, "old_scores:", cur_scores)
                                 print("new_scores:", new_scores)
+                                print("------")
                             break
                     else:
-                        print("pde:", pde, "small_idxs:", small_idxs, "cur_cand_idxs[small_idxs]", cur_cand_idxs[small_idxs])
-                        print_flag = True
-                        print("old_scores:", cur_scores)
-                        print("big_idxs:", big_idxs)
+#                         print("pde:", pde, "small_idxs:", small_idxs, "cur_cand_idxs[small_idxs]", cur_cand_idxs[small_idxs])
+#                         print_flag = True
+#                         print("before change old_scores:", cur_scores)
+#                         print("big_idxs:", big_idxs)
                         cur_cand_idxs[small_idxs] = big_idxs
                         death_cnt = 0
 
