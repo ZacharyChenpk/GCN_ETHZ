@@ -36,12 +36,12 @@ class MulRelRanker(LocalCtxAttRanker):
         # self.cnn used to calculate local scores
         self.cnn = torch.nn.Conv1d(self.emb_dims, 64, kernel_size=3)
         
-        # self.gcn = GCN(self.emb_dims, self.emb_dims, self.emb_dims, config['gdr'])
-        self.gcn_ment = GCN(64, self.emb_dims, self.emb_dims, config['gdr'])
-        self.gcn_entity = GCN(self.emb_dims, self.emb_dims, self.emb_dims, config['gdr'])
+        self.gcn = GCN(self.emb_dims, self.emb_dims, self.emb_dims, config['gdr'])
+#         self.gcn_ment = GCN(64, self.emb_dims, self.emb_dims, config['gdr'])
+#         self.gcn_entity = GCN(self.emb_dims, self.emb_dims, self.emb_dims, config['gdr'])
         
         # self.cnn_mgraph used to calculate ment embeddings in graph
-        # self.cnn_mgraph = torch.nn.Conv1d(self.emb_dims, self.emb_dims, kernel_size=5)
+        self.cnn_mgraph = torch.nn.Conv1d(self.emb_dims, self.emb_dims, kernel_size=5)
         
         # self.m_e_score = torch.nn.Linear(2 * self.emb_dims, 1)
         self.m_e_diag = torch.nn.Parameter(torch.randn(self.emb_dims))
@@ -172,9 +172,9 @@ class MulRelRanker(LocalCtxAttRanker):
 
         local_ent_scores = super(MulRelRanker, self).forward(token_ids, tok_mask, entity_ids, entity_mask,p_e_m=None)
         # ment_emb: n_ment * emb_dim (only one graph)
-        # ment_emb = F.max_pool1d(self.cnn_mgraph(context_emb.permute(0, 2, 1)), context_len-4).squeeze(2)
+        ment_emb = F.max_pool1d(self.cnn_mgraph(context_emb.permute(0, 2, 1)), context_len-4).squeeze(2)
         # ment_emb: n_ment * 64 (only one graph)
-        ment_emb = context_cnn.squeeze(1)
+#         ment_emb = context_cnn.squeeze(1)
 
         local_ent_scores = local_ent_scores.view(n_ments, n_cands)
         p_e_m = torch.log(p_e_m + 1e-20).view(n_ments, n_cands)
@@ -206,8 +206,10 @@ class MulRelRanker(LocalCtxAttRanker):
             aaa, bbb, n_node, emb_dim = nega_entity_emb.size()
             ment_emb = gcnutil.feature_norm(ment_emb)
             nega_entity_emb = gcnutil.batch_feature_norm(nega_entity_emb.view(-1, n_node, emb_dim)).view(aaa, bbb, n_node, emb_dim)
-            ment_emb = self.gcn_ment(ment_emb, m_graph_adj.long())
-            nega_entity_emb = self.gcn_entity.batch_forward(nega_entity_emb.view(-1, n_node, emb_dim), nega_adjs.view(-1, n_node, n_node)).view(aaa, bbb, n_node, emb_dim)
+#             ment_emb = self.gcn_ment(ment_emb, m_graph_adj.long())
+#             nega_entity_emb = self.gcn_entity.batch_forward(nega_entity_emb.view(-1, n_node, emb_dim), nega_adjs.view(-1, n_node, n_node)).view(aaa, bbb, n_node, emb_dim)
+            ment_emb = self.gcn(ment_emb, m_graph_adj.long())
+            nega_entity_emb = self.gcn.batch_forward(nega_entity_emb.view(-1, n_node, emb_dim), nega_adjs.view(-1, n_node, n_node)).view(aaa, bbb, n_node, emb_dim)
             
             if isTrain and random.random()<0.01:
                 print("randomly printing Training embeddings")
@@ -295,8 +297,10 @@ class MulRelRanker(LocalCtxAttRanker):
             nega_entity_emb = self.entity_embeddings(nega_node_cands)
             ment_emb = gcnutil.feature_norm(ment_emb)
             nega_entity_emb = gcnutil.feature_norm(nega_entity_emb)
-            ment_emb = self.gcn_ment(ment_emb, m_graph_adj)
-            nega_entity_emb = self.gcn_entity(nega_entity_emb, nega_adjs)
+#             ment_emb = self.gcn_ment(ment_emb, m_graph_adj)
+#             nega_entity_emb = self.gcn_entity(nega_entity_emb, nega_adjs)
+            ment_emb = self.gcn(ment_emb, m_graph_adj)
+            nega_entity_emb = self.gcn(nega_entity_emb, nega_adjs)
 
             mention_graph_emb = torch.mean(ment_emb, dim=0)
             entity_graph_emb = torch.mean(nega_entity_emb, dim=0)
@@ -437,5 +441,6 @@ class MulRelRanker(LocalCtxAttRanker):
     def global_parameter(self):
         # lst = [self.gcn.parameters(), self.cnn_mgraph.parameters(), self.m_e_score.parameters()]
         # lst = [self.gcn.parameters(), self.cnn_mgraph.parameters(), self.global_score_combine.parameters()]
-        lst = [self.gcn_ment.parameters(), self.gcn_entity.parameters(), self.global_score_combine.parameters()]
+#         lst = [self.gcn_ment.parameters(), self.gcn_entity.parameters(), self.global_score_combine.parameters()]
+        lst = [self.gcn.parameters(), self.cnn_mgraph.parameters(), self.global_score_combine.parameters()]
         return [p for a in lst for p in a if p.requires_grad] + [self.gcned_mat_diag, self.m_e_diag]
